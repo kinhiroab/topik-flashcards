@@ -1533,7 +1533,7 @@
       { id: 1500, korean: "기본단어1500", english: "basic word 1500", level: 2, example_kr: "이것은 기본단어1500 예문입니다.", example_en: "This is an example sentence for basic word 1500." },
     ];
 
-    function App() {
+function App() {
       // 1. Safe localStorage state initialization for words
       const [words, setWords] = useState(() => {
         try {
@@ -1605,10 +1605,11 @@
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
                 <h3 className="text-sm font-medium text-slate-500 mb-2">Sample Loaded Words:</h3>
                 <ul className="space-y-2">
-                  {words.map(word => (
+                  {words.slice(0, 5).map(word => (
                     <li key={word.id} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg flex justify-between items-center">
                       <span className="font-medium text-lg">{word.korean}</span>
-                      <span className="text-slate-500 dark:text-slate-400">{word.meaning}</span>
+                      {/* Fixed from word.meaning to word.english to match your object structure */}
+                      <span className="text-slate-500 dark:text-slate-400">{word.english}</span>
                     </li>
                   ))}
                 </ul>
@@ -1619,7 +1620,7 @@
       );
     }
 
-    // React 18 Render Method (Fixes the blank screen error)
+    // React 18 Render Method
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
