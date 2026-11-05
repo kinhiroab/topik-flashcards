@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TOPIK Flashcard Pro</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Initial Core TOPIK Database (Can be expanded)
+    const INITIAL_WORDS = [
+      { id: 1, korean: "학교", english: "school", level: 1, example_kr: "내일 학교에 갑니다.", example_en: "I go to school tomorrow." },
+      { id: 2, korean: "공부하다", english: "to study", level: 1, example_kr: "한국어를 공부합니다.", example_en: "I study Korean." },
+      { id: 3, korean: "친구", english: "friend", level: 1, example_kr: "도서관에서 친구를 만났습니다.", example_en: "I met a friend at the library." },
+      { id: 4, korean: "사과", english: "apple", level: 1, example_kr: "냉장고에 사과가 있습니다.", example_en: "There is an apple in the refrigerator." },
+      { id: 5, korean: "음식", english: "food", level: 1, example_kr: "한국 음식을 좋아합니다.", example_en: "I like Korean food." },
+      { id: 6, korean: "선생님", english: "teacher", level: 1, example_kr: "선생님께 질문을 했습니다.", example_en: "I asked the teacher a question." },
+      { id: 7, korean: "시간", english: "time", level: 1, example_kr: "지금 시간이 없습니다.", example_en: "I don't have time right now." },
+      { id: 8, korean: "책", english: "book", level: 1, example_kr: "서점에서 책을 샀습니다.", example_en: "I bought a book at the bookstore." },
+      { id: 9, korean: "영화", english: "movie", level: 1, example_kr: "주말에 영화를 봅니다.", example_en: "I watch a movie on the weekend." },
+      { id: 10, korean: "가게", english: "store", level: 1, example_kr: "가게에서 과자를 샀습니다.", example_en: "I bought snacks at the store." },
+      { id: 11, korean: "가격", english: "price", level: 1, example_kr: "이 옷은 가격이 싸요.", example_en: "This clothing item is cheap in price." },
+      { id: 12, korean: "가방", english: "bag", level: 1, example_kr: "가방에 책을 넣었습니다.", example_en: "I put the book in the bag." },
+      { id: 13, korean: "가족", english: "family", level: 1, example_kr: "우리 가족은 모두 서울에 살아요.", example_en: "My family all lives in Seoul." },
+      { id: 14, korean: "감기", english: "cold", level: 1, example_kr: "감기에 걸려서 약을 먹었습니다.", example_en: "I caught a cold so I took medicine." },
+      { id: 15, korean: "경찰서", english: "police station", level: 1, example_kr: "길을 물어보려고 경찰서에 갔습니다.", example_en: "I went to the police station to ask for directions." }
+    ];
+
+    function App() {
+      const [words, setWords] = useState(() => {
+        const saved = localStorage.getItem('topik_words');
+        return saved ? JSON.parse(saved) : INITIAL_WORDS;
+      });
+
+      const [progress, setProgress] = useState(() => {
+        const saved = localStorage.getItem('topik_progress');
+        return saved ? JSON.parse(saved) : {};
+      });
+
+      const [masteryTarget, setMasteryTarget] = useState(() => {
+        return parseInt(localStorage.getItem('topik_mastery_target') || '3', 10);
+      });
+
+      const [batchSize, setBatchSize] = useState(() => {
+        return parseInt(localStorage.getItem('topik_batch_size') || '10', 10);
+      });
+
+      const [activeTab, setActiveTab] = useState('study'); // study, import, stats
+      const [currentIndex, setCurrentIndex] = useState(0);
+      const [direction, setDirection] = useState('en_to_kr'); // en_to_kr or kr_to_en
+      const [userInput, setUserInput] = useState('');
+      const [selectedChoice, setSelectedChoice] = useState(null);
+      const [feedback, setFeedback] = useState(null); // null, 'correct', 'incorrect'
+      const [choices, setChoices] = useState([]);
+      const [importText, setImportText] = useState('');
+
+      // Save state
+      useEffect(() => {
+        localStorage.setItem('topik_words', JSON.stringify(words));
+      }, [words]);
+
+      useEffect(() => {
+        localStorage.setItem('topik_progress', JSON.stringify(progress));
+      }, [progress]);
+
+      useEffect(() => {
+        localStorage.setItem('topik_mastery_target', masteryTarget.toString());
+      }, [masteryTarget]);
+
+      useEffect(() => {
+        localStorage.setItem('topik_batch_size', batchSize.toString());
+      }, [batchSize]);
+
+      // Filter unmastered words
+      const activeWords = words.filter(w => {
+        const stats = progress[w.id] || { streak: 0 };
+        return stats.streak < masteryTarget;
+      });
+
+      // Slice into current batch/class
+      const currentBatch = activeWords.slice(0, batchSize);
+      const currentWord = currentBatch[currentIndex % currentBatch.length];
+
+      // Setup multiple choice options when card changes
+      useEffect(() => {
+        if (!currentWord) return;
+        const otherWords = words.filter(w => w.id !== currentWord.id);
+        const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random()).slice(0, 3);
+        const targetAnswer = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
+        const wrongAnswers = shuffledOthers.map(w => direction === 'en_to_kr' ? w.korean : w.english);
+        const allChoices = [targetAnswer, ...wrongAnswers].sort(() => 0.5 - Math.random());
+        setChoices(allChoices);
+        setUserInput('');
+        setSelectedChoice(null);
+        setFeedback(null);
+      }, [currentIndex, currentWord, direction]);
+
+      if (currentBatch.length === 0 && words.length > 0) {
+        return (
+          <div className="max-w-md mx-auto mt-20 p-8 bg-white rounded-2xl shadow-xl text-center">
+            <h2 className="text-2xl font-bold text-emerald-600 mb-4">🎉 Batch Complete!</h2>
+            <p className="text-slate-600 mb-6">You have successfully mastered all current active cards based on your {masteryTarget}-streak threshold.</p>
+            <button 
+              onClick={() => { setProgress({}); setCurrentIndex(0); }}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
+            >
+              Reset Progress & Restart
+            </button>
+          </div>
+        );
+      }
+
+      const handleCheck = (submittedAnswer) => {
+        if (feedback !== null || !currentWord) return;
+
+        const target = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
+        const isCorrect = submittedAnswer.trim() === target.trim();
+
+        const wordId = currentWord.id;
+        const currentStats = progress[wordId] || { streak: 0 };
+        const newStreak = isCorrect ? currentStats.streak + 1 : 0;
+
+        setProgress({
+          ...progress,
+          [wordId]: { streak: newStreak }
+        });
+
+        setFeedback(isCorrect ? 'correct' : 'incorrect');
+      };
+
+      const handleNext = () => {
+        setFeedback(null);
+        setUserInput('');
+        setSelectedChoice(null);
+        setCurrentIndex(prev => prev + 1);
+      };
+
+      const handleImport = () => {
+        try {
+          const parsed = JSON.parse(importText);
+          if (Array.isArray(parsed)) {
+            setWords(parsed);
+            setProgress({});
+            setCurrentIndex(0);
+            setActiveTab('study');
+            alert(`Successfully imported ${parsed.length} words!`);
+          } else {
+            alert('JSON must be an array of objects.');
+          }
+        } catch (e) {
+          alert('Invalid JSON format. Please check your data.');
+        }
+      };
+
+      return (
+        <div className="max-w-lg mx-auto p-4 sm:p-6">
+          {/* Header */}
+          <header className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <div>
+              <h1 className="text-xl font-bold text-slate-800">TOPIK Flashcards</h1>
+              <p className="text-xs text-slate-500">Active Pool: {activeWords.length} / {words.length} words</p>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setActiveTab('study')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'study' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+              >
+                Study
+              </button>
+              <button 
+                onClick={() => setActiveTab('import')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'import' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+              >
+                Data
+              </button>
+            </div>
+          </header>
+
+          {activeTab === 'study' && currentWord && (
+            <main className="space-y-6">
+              {/* Settings Control Bar */}
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Mastery Streak Goal</label>
+                  <select 
+                    value={masteryTarget} 
+                    onChange={(e) => setMasteryTarget(parseInt(e.target.value, 10))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-medium"
+                  >
+                    {[...Array(10)].map((_, i) => (
+                      <option key={i+1} value={i+1}>{i+1} correct streak</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Batch / Class Size</label>
+                  <select 
+                    value={batchSize} 
+                    onChange={(e) => { setBatchSize(parseInt(e.target.value, 10)); setCurrentIndex(0); }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-medium"
+                  >
+                    {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(size => (
+                      <option key={size} value={size}>{size} words/class</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Mode & Progress Bar */}
+              <div className="flex justify-between items-center px-1">
+                <button 
+                  onClick={() => setDirection(prev => prev === 'en_to_kr' ? 'kr_to_en' : 'en_to_kr')}
+                  className="text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"
+                >
+                  Mode: {direction === 'en_to_kr' ? 'English ➔ Korean (Type)' : 'Korean ➔ English'}
+                </button>
+                <span className="text-xs font-medium text-slate-400">
+                  Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
+                </span>
+              </div>
+
+              {/* Flashcard Box */}
+              <div className="bg-white rounded-3xl shadow-md border border-slate-100 p-6 sm:p-8 text-center relative overflow-hidden">
+                <div className="absolute top-4 left-4 bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full font-medium">
+                  Level {currentWord.level || 1}
+                </div>
+
+                <div className="my-8">
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 tracking-tight mb-2">
+                    {direction === 'en_to_kr' ? currentWord.english : currentWord.korean}
+                  </h2>
+                  <p className="text-xs uppercase tracking-widest text-slate-400 font-medium">
+                    {direction === 'en_to_kr' ? 'Translate to Korean' : 'Translate to English'}
+                  </p>
+                </div>
+
+                {/* Example sentence context (hiding target language during test) */}
+                <div className="bg-slate-50 p-4 rounded-xl text-left mb-6 border border-slate-100 text-sm">
+                  <p className="text-slate-500 font-medium mb-1">Example Context:</p>
+                  <p className="text-slate-800">
+                    {direction === 'en_to_kr' ? currentWord.example_en : currentWord.example_kr}
+                  </p>
+                  {feedback !== null && (
+                    <p className="text-blue-600 mt-2 pt-2 border-t border-slate-200">
+                      {direction === 'en_to_kr' ? currentWord.example_kr : currentWord.example_en}
+                    </p>
+                  )}
+                </div>
+
+                {/* Input form or feedback state */}
+                {feedback === null ? (
+                  <div className="space-y-4">
+                    {direction === 'en_to_kr' ? (
+                      <form onSubmit={(e) => { e.preventDefault(); handleCheck(userInput); }}>
+                        <input
+                          type="text"
+                          value={userInput}
+                          onChange={(e) => setUserInput(e.target.value)}
+                          placeholder="Type in Korean (Hangul)..."
+                          className="w-full p-4 border border-slate-200 rounded-xl text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 mb-3"
+                          autoFocus
+                        />
+                        <button 
+                          type="submit"
+                          className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
+                        >
+                          Check Answer
+                        </button>
+                      </form>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {choices.map((choice, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleCheck(choice)}
+                            className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition text-center"
+                          >
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`p-6 rounded-2xl text-center space-y-4 ${feedback === 'correct' ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' : 'bg-rose-50 border border-rose-100 text-rose-800'}`}>
+                    <h3 className="text-xl font-bold">
+                      {feedback === 'correct' ? '✨ Correct!' : '❌ Incorrect'}
+                    </h3>
+                    <div className="text-sm">
+                      <p className="text-slate-500">Correct Answer:</p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {direction === 'en_to_kr' ? currentWord.korean : currentWord.english}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleNext}
+                      className="w-full py-3 bg-slate-900 text-white rounded-xl font-semibold shadow hover:bg-slate-800 transition"
+                    >
+                      Next Card ➔
+                    </button>
+                  </div>
+                )}
+              </div>
+            </main>
+          )}
+
+          {activeTab === 'import' && (
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
+              <h2 className="text-lg font-bold text-slate-800">Database & JSON Import</h2>
+              <p className="text-xs text-slate-500">
+                Paste your custom JSON array of TOPIK words below to update your word bank instantly.
+              </p>
+              <textarea
+                rows="10"
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder={'[\n  {\n    "id": 1,\n    "korean": "학교",\n    "english": "school",\n    "level": 1,\n    "example_kr": "내일 학교에 갑니다.",\n    "example_en": "I go to school tomorrow."\n  }\n]'}
+                className="w-full p-3 border border-slate-200 rounded-xl font-mono text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={handleImport}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
+                >
+                  Import JSON Data
+                </button>
+                <button
+                  onClick={() => { setWords(INITIAL_WORDS); setProgress({}); alert('Reset to default starter words!'); }}
+                  className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-medium hover:bg-slate-200 transition text-sm"
+                >
+                  Reset Default
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  </script>
+</body>
+</html>
