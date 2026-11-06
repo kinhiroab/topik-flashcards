@@ -1,28 +1,57 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TOPIK Flashcard Pro</title>
-  <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/kinhiroab/topik-flashcards/ac644c274c03641969e001ad6ae5a93974cfeec4/tiger-icon.png">
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-    }
-  </script>
-  <!-- React & ReactDOM -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel for JSX -->
-  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TOPIK Korean Vocabulary Flashcards</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        korean: {
+                            red: '#C60C30',
+                            blue: '#003478',
+                            lightBg: '#F8FAFC',
+                            darkBg: '#0F172A',
+                            cardLight: '#FFFFFF',
+                            cardDark: '#1E293B',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- React & ReactDOM UMD -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel for JSX compilation in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+        }
+        .animate-bounce-short {
+            animation: bounce 0.5s ease-in-out 1;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+    </style>
 </head>
-<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-200">
-  <div id="root"></div>
+<body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-200">
+    <div id="root" class="h-full"></div>
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
     
     const INITIAL_WORDS = [
       { id: 1, korean: "가게", english: "store", level: 1, example_kr: "가게에서 과자를 샀습니다.", example_en: "I bought snacks at the store." },
@@ -1528,363 +1557,720 @@
     ];
 
     function App() {
-      const [words, setWords] = useState(() => {
-        const saved = localStorage.getItem('topik_words');
-        return saved ? JSON.parse(saved) : INITIAL_WORDS;
-      });
+            // Local Storage Persistence Key
+            const STORAGE_KEY = 'topik_flashcards_progress_v2';
 
-      const [progress, setProgress] = useState(() => {
-        const saved = localStorage.getItem('topik_progress');
-        return saved ? JSON.parse(saved) : {};
-      });
+            // Theme State
+            const [darkMode, setDarkMode] = useState(() => {
+                const saved = localStorage.getItem('topik_dark_mode');
+                return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches;
+            });
 
-      const [masteryTarget, setMasteryTarget] = useState(() => {
-        return parseInt(localStorage.getItem('topik_mastery_target') || '3', 10);
-      });
+            // Navigation Tab State: 'study' | 'history'
+            const [activeTab, setActiveTab] = useState('study');
 
-      const [batchSize, setBatchSize] = useState(() => {
-        return parseInt(localStorage.getItem('topik_batch_size') || '10', 10);
-      });
+            // Word Mastery Record State: { [wordId]: streakNumber }
+            const [wordStreaks, setWordStreaks] = useState(() => {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                return saved ? JSON.parse(saved) : {};
+            });
 
-      const [darkMode, setDarkMode] = useState(() => {
-        return localStorage.getItem('topik_dark_mode') === 'true';
-      });
+            // --- Study Config State (Approach B Setup Screen) ---
+            const [selectedLevels, setSelectedLevels] = useState([1]); // Levels 1, 2, 3
+            const [direction, setDirection] = useState('en_ko'); // 'en_ko' (Eng -> Kor) or 'ko_en' (Kor -> Eng)
+            const [inputMode, setInputMode] = useState('mc'); // 'mc' (Multiple Choice) or 'typing'
+            const [masteryGoal, setMasteryGoal] = useState(3); // Streak target to master a word
+            const [batchSize, setBatchSize] = useState(10); // Batch limit: 5, 10, 20, 50, 999 (All)
 
-      const [activeTab, setActiveTab] = useState('study'); // study, import
-      const [currentIndex, setCurrentIndex] = useState(0);
-      
-      // Two completely separate settings:
-      const [direction, setDirection] = useState('en_to_kr'); // 'en_to_kr' or 'kr_to_en'
-      const [inputMode, setInputMode] = useState('typing'); // 'typing' or 'multiple'
+            // --- Active Session State ---
+            const [sessionState, setSessionState] = useState('setup'); // 'setup' | 'active' | 'completed'
+            const [sessionBatch, setSessionBatch] = useState([]);
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
 
-      const [userInput, setUserInput] = useState('');
-      const [feedback, setFeedback] = useState(null); // null, 'correct', 'incorrect'
-      const [choices, setChoices] = useState([]);
-      const [importText, setImportText] = useState('');
+            // --- Active Card Interaction State ---
+            const [userInput, setUserInput] = useState('');
+            const [mcOptions, setMcOptions] = useState([]);
+            const [feedback, setFeedback] = useState(null); // { isCorrect: bool, text: string }
+            const [showHint, setShowHint] = useState(false);
+            const inputRef = useRef(null);
 
-      // Save state & Dark mode class toggling
-      useEffect(() => {
-        localStorage.setItem('topik_words', JSON.stringify(words));
-      }, [words]);
+            // Toggle Dark Mode Class
+            useEffect(() => {
+                if (darkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                localStorage.setItem('topik_dark_mode', JSON.stringify(darkMode));
+            }, [darkMode]);
 
-      useEffect(() => {
-        localStorage.setItem('topik_progress', JSON.stringify(progress));
-      }, [progress]);
+            // Save Progress to LocalStorage
+            useEffect(() => {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(wordStreaks));
+            }, [wordStreaks]);
 
-      useEffect(() => {
-        localStorage.setItem('topik_mastery_target', masteryTarget.toString());
-      }, [masteryTarget]);
+            // Audio Speech Synthesis for Korean Pronunciation
+            const speakKorean = (text) => {
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel(); // Stop ongoing speech
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    utterance.lang = 'ko-KR';
+                    utterance.rate = 0.9;
+                    window.speechSynthesis.speak(utterance);
+                }
+            };
 
-      useEffect(() => {
-        localStorage.setItem('topik_batch_size', batchSize.toString());
-      }, [batchSize]);
+            // Calculate active pool of words based on level & mastery
+            const eligibleWords = useMemo(() => {
+                return INITIAL_VOCABULARY.filter(word => {
+                    const isLevelMatch = selectedLevels.includes(word.level);
+                    const currentStreak = wordStreaks[word.id] || 0;
+                    const isNotMastered = currentStreak < masteryGoal;
+                    return isLevelMatch && isNotMastered;
+                });
+            }, [selectedLevels, wordStreaks, masteryGoal]);
 
-      useEffect(() => {
-        localStorage.setItem('topik_dark_mode', darkMode);
-        if (darkMode) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
+            // Mastered words array for History Tab
+            const masteredWords = useMemo(() => {
+                return INITIAL_VOCABULARY.filter(word => {
+                    const currentStreak = wordStreaks[word.id] || 0;
+                    return currentStreak >= masteryGoal;
+                });
+            }, [wordStreaks, masteryGoal]);
+
+            // Handle Level Toggle
+            const toggleLevel = (lvl) => {
+                if (selectedLevels.includes(lvl)) {
+                    if (selectedLevels.length > 1) {
+                        setSelectedLevels(selectedLevels.filter(l => l !== lvl));
+                    }
+                } else {
+                    setSelectedLevels([...selectedLevels, lvl].sort());
+                }
+            };
+
+            // Start New Class Session
+            const startSession = () => {
+                if (eligibleWords.length === 0) return;
+
+                // Shuffle eligible words
+                const shuffled = [...eligibleWords].sort(() => Math.random() - 0.5);
+                const count = Math.min(batchSize, shuffled.length);
+                const selectedBatch = shuffled.slice(0, count);
+
+                setSessionBatch(selectedBatch);
+                setCurrentIndex(0);
+                setSessionStats({ correct: 0, incorrect: 0 });
+                setFeedback(null);
+                setUserInput('');
+                setShowHint(false);
+                setSessionState('active');
+
+                // Generate MC Options if starting on Card 0
+                if (inputMode === 'mc' && selectedBatch.length > 0) {
+                    generateMCOptions(selectedBatch[0], selectedBatch);
+                }
+            };
+
+            // Generate Multiple Choice Options (1 Correct + 3 Distractors)
+            const generateMCOptions = (targetCard, batchPool) => {
+                const targetText = direction === 'en_ko' ? targetCard.korean : targetCard.english;
+
+                // Grab pool of all available terms for distractors
+                const pool = INITIAL_VOCABULARY.filter(w => w.id !== targetCard.id);
+                const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
+
+                const distractors = shuffledPool.slice(0, 3).map(w => 
+                    direction === 'en_ko' ? w.korean : w.english
+                );
+
+                const allChoices = [...distractors, targetText].sort(() => Math.random() - 0.5);
+                setMcOptions(allChoices);
+            };
+
+            // Prepare Next Card in Session
+            useEffect(() => {
+                if (sessionState === 'active' && sessionBatch.length > 0 && currentIndex < sessionBatch.length) {
+                    const currentCard = sessionBatch[currentIndex];
+                    setUserInput('');
+                    setFeedback(null);
+                    setShowHint(false);
+
+                    if (inputMode === 'mc') {
+                        generateMCOptions(currentCard, sessionBatch);
+                    } else {
+                        // Focus input box for typing
+                        setTimeout(() => inputRef.current?.focus(), 100);
+                    }
+
+                    // Auto speak Korean term if prompt is Korean
+                    if (direction === 'ko_en') {
+                        speakKorean(currentCard.korean);
+                    }
+                }
+            }, [currentIndex, sessionState]);
+
+            // Submit Answer Logic
+            const handleAnswer = (selectedAnswer) => {
+                if (feedback !== null) return; // Prevent duplicate clicks
+
+                const currentCard = sessionBatch[currentIndex];
+                const correctAnswer = direction === 'en_ko' ? currentCard.korean : currentCard.english;
+
+                let isRight = false;
+                if (inputMode === 'mc') {
+                    isRight = selectedAnswer === correctAnswer;
+                } else {
+                    // String trimming and case insensitive comparison for English
+                    const cleanUser = userInput.trim().toLowerCase();
+                    const cleanTarget = correctAnswer.trim().toLowerCase();
+                    isRight = cleanUser === cleanTarget;
+                }
+
+                if (isRight) {
+                    setFeedback({ isCorrect: true, text: 'Correct! 잘했어요!' });
+                    setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
+                    
+                    // Update streak state
+                    setWordStreaks(prev => ({
+                        ...prev,
+                        [currentCard.id]: (prev[currentCard.id] || 0) + 1
+                    }));
+
+                    if (direction === 'en_ko') speakKorean(currentCard.korean);
+                } else {
+                    setFeedback({ 
+                        isCorrect: false, 
+                        text: `Incorrect. Correct Answer: ${correctAnswer}` 
+                    });
+                    setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
+                    
+                    // Reset streak on error
+                    setWordStreaks(prev => ({
+                        ...prev,
+                        [currentCard.id]: 0
+                    }));
+                }
+            };
+
+            // Progress to Next Card or Complete Session
+            const nextCard = () => {
+                if (currentIndex + 1 < sessionBatch.length) {
+                    setCurrentIndex(currentIndex + 1);
+                } else {
+                    setSessionState('completed');
+                }
+            };
+
+            // Reset Word Streak in History Tab
+            const resetWordStreak = (id) => {
+                setWordStreaks(prev => {
+                    const copy = { ...prev };
+                    delete copy[id];
+                    return copy;
+                });
+            };
+
+            // Reset All Mastered Words
+            const resetAllMastered = () => {
+                if (window.confirm("Are you sure you want to reset all mastered words back into the study pool?")) {
+                    setWordStreaks({});
+                }
+            };
+
+            const currentCard = sessionBatch[currentIndex];
+
+            return (
+                <div className="flex flex-col h-full min-h-screen bg-slate-100 dark:bg-slate-900">
+                    
+                    {/* 1. PERSISTENT TOP HEADER */}
+                    <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shadow-sm sticky top-0 z-50">
+                        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+                            
+                            {/* App Title & Branding */}
+                            <div className="flex items-center space-x-3">
+                                <span className="text-2xl" role="img" aria-label="tiger">🐅</span>
+                                <div>
+                                    <h1 className="font-bold text-lg leading-none text-slate-900 dark:text-white flex items-center gap-2">
+                                        TOPIK <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 font-semibold">Vocabulary</span>
+                                    </h1>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Korean Learning App</p>
+                                </div>
+                            </div>
+
+                            {/* Global Controls & Emoji Navigation */}
+                            <div className="flex items-center space-x-2">
+                                <button
+                                    onClick={() => setActiveTab('study')}
+                                    className={`px-3 py-1.5 rounded-xl font-medium text-sm flex items-center space-x-1.5 transition-all ${
+                                        activeTab === 'study' 
+                                            ? 'bg-blue-600 text-white shadow-md' 
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                                    }`}
+                                >
+                                    <span>📚</span>
+                                    <span className="hidden sm:inline">Study</span>
+                                </button>
+
+                                <button
+                                    onClick={() => setActiveTab('history')}
+                                    className={`px-3 py-1.5 rounded-xl font-medium text-sm flex items-center space-x-1.5 transition-all ${
+                                        activeTab === 'history' 
+                                            ? 'bg-blue-600 text-white shadow-md' 
+                                            : 'bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200'
+                                    }`}
+                                >
+                                    <span>🏆</span>
+                                    <span className="hidden sm:inline">History</span>
+                                    {masteredWords.length > 0 && (
+                                        <span className="ml-1 px-1.5 py-0.2 text-xs rounded-full bg-amber-400 text-slate-900 font-bold">
+                                            {masteredWords.length}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* Dark Mode Toggle */}
+                                <button
+                                    onClick={() => setDarkMode(!darkMode)}
+                                    className="p-2 rounded-xl bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors"
+                                    title="Toggle Theme"
+                                >
+                                    {darkMode ? '☀️' : '🌙'}
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* MAIN CONTENT CONTAINER */}
+                    <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 flex flex-col justify-center">
+
+                        {/* ========================================================================= */}
+                        {/* TAB 1: STUDY TAB (APPROACH B 3-STATE FLOW)                                */}
+                        {/* ========================================================================= */}
+                        {activeTab === 'study' && (
+                            <div className="w-full">
+                                
+                                {/* STATE 1: SETUP SCREEN */}
+                                {sessionState === 'setup' && (
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 p-6 sm:p-8 max-w-xl mx-auto transition-all">
+                                        <div className="text-center mb-6">
+                                            <div className="inline-block p-3 bg-blue-50 dark:bg-blue-950/50 rounded-2xl mb-2 text-2xl">⚡</div>
+                                            <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Configure Your Class</h2>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Customize your study session parameters</p>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            {/* Level Selector */}
+                                            <div>
+                                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                                    1. Select TOPIK Levels
+                                                </label>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {[1, 2, 3].map(lvl => {
+                                                        const isSelected = selectedLevels.includes(lvl);
+                                                        return (
+                                                            <button
+                                                                key={lvl}
+                                                                type="button"
+                                                                onClick={() => toggleLevel(lvl)}
+                                                                className={`py-2.5 px-3 rounded-xl border text-sm font-semibold transition-all flex items-center justify-center space-x-1.5 ${
+                                                                    isSelected
+                                                                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                        : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                                                                }`}
+                                                            >
+                                                                <span>Level {lvl}</span>
+                                                                {isSelected && <i className="fa-solid fa-circle-check text-xs"></i>}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            {/* Translation Direction */}
+                                            <div>
+                                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                                    2. Translation Direction
+                                                </label>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDirection('en_ko')}
+                                                        className={`p-3 rounded-xl border text-sm font-semibold text-center transition-all ${
+                                                            direction === 'en_ko'
+                                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                                        }`}
+                                                    >
+                                                        English ➔ Korean
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDirection('ko_en')}
+                                                        className={`p-3 rounded-xl border text-sm font-semibold text-center transition-all ${
+                                                            direction === 'ko_en'
+                                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                                        }`}
+                                                    >
+                                                        Korean ➔ English
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Input Mode */}
+                                            <div>
+                                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                                    3. Input Mode
+                                                </label>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setInputMode('mc')}
+                                                        className={`p-3 rounded-xl border text-sm font-semibold flex items-center justify-center space-x-2 transition-all ${
+                                                            inputMode === 'mc'
+                                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                                        }`}
+                                                    >
+                                                        <i className="fa-solid fa-list-check"></i>
+                                                        <span>Multiple Choice</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setInputMode('typing')}
+                                                        className={`p-3 rounded-xl border text-sm font-semibold flex items-center justify-center space-x-2 transition-all ${
+                                                            inputMode === 'typing'
+                                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm'
+                                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                                        }`}
+                                                    >
+                                                        <i className="fa-solid fa-keyboard"></i>
+                                                        <span>Typing Mode</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Streak Goal & Batch Size Grid */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                                        Mastery Goal
+                                                    </label>
+                                                    <select
+                                                        value={masteryGoal}
+                                                        onChange={(e) => setMasteryGoal(Number(e.target.value))}
+                                                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    >
+                                                        <option value={2}>2 Streaks</option>
+                                                        <option value={3}>3 Streaks (Standard)</option>
+                                                        <option value={5}>5 Streaks (Mastery)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                                                        Batch Size
+                                                    </label>
+                                                    <select
+                                                        value={batchSize}
+                                                        onChange={(e) => setBatchSize(Number(e.target.value))}
+                                                        className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    >
+                                                        <option value={5}>5 Words</option>
+                                                        <option value={10}>10 Words</option>
+                                                        <option value={20}>20 Words</option>
+                                                        <option value={999}>All Words</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Available Pool Notice */}
+                                            <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                                                <span>Active pool available for study:</span>
+                                                <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">
+                                                    {eligibleWords.length} words
+                                                </span>
+                                            </div>
+
+                                            {/* CTA Button */}
+                                            <button
+                                                type="button"
+                                                onClick={startSession}
+                                                disabled={eligibleWords.length === 0}
+                                                className={`w-full py-3.5 px-4 rounded-xl font-bold text-white text-base shadow-lg transition-all flex items-center justify-center space-x-2 ${
+                                                    eligibleWords.length > 0
+                                                        ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/25 active:scale-[0.99]'
+                                                        : 'bg-slate-400 cursor-not-allowed opacity-60'
+                                                }`}
+                                            >
+                                                <span>Start Class</span>
+                                                <i className="fa-solid fa-arrow-right text-sm"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* STATE 2: ACTIVE FLASHCARD SCREEN */}
+                                {sessionState === 'active' && currentCard && (
+                                    <div className="max-w-xl mx-auto w-full">
+                                        
+                                        {/* Progress Bar & Header */}
+                                        <div className="mb-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                            <div className="flex justify-between items-center text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                                                <span>CARD {currentIndex + 1} OF {sessionBatch.length}</span>
+                                                <div className="flex items-center space-x-3">
+                                                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                                        🔥 Streak: {wordStreaks[currentCard.id] || 0}/{masteryGoal}
+                                                    </span>
+                                                    <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                        Level {currentCard.level}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                                                <div 
+                                                    className="bg-blue-600 h-full transition-all duration-300"
+                                                    style={{ width: `${((currentIndex + 1) / sessionBatch.length) * 100}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+
+                                        {/* Main Flashcard */}
+                                        <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 sm:p-8 text-center relative overflow-hidden transition-all">
+                                            
+                                            {/* Flashcard Prompt */}
+                                            <div className="mb-6">
+                                                <div className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-2">
+                                                    {direction === 'en_ko' ? 'Translate to Korean' : 'Translate to English'}
+                                                </div>
+
+                                                <div className="flex items-center justify-center space-x-3 my-3">
+                                                    <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+                                                        {direction === 'en_ko' ? currentCard.english : currentCard.korean}
+                                                    </h2>
+
+                                                    {/* Audio Playback Button */}
+                                                    <button
+                                                        onClick={() => speakKorean(currentCard.korean)}
+                                                        className="p-2.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all"
+                                                        title="Listen to Korean Pronunciation"
+                                                    >
+                                                        <i className="fa-solid fa-volume-high text-lg"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Example Sentence Context / Hint Toggle */}
+                                            <div className="mb-6">
+                                                {!showHint ? (
+                                                    <button
+                                                        onClick={() => setShowHint(true)}
+                                                        className="text-xs text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center justify-center mx-auto gap-1"
+                                                    >
+                                                        <i className="fa-regular fa-lightbulb"></i>
+                                                        <span>Show Context / Example Sentence</span>
+                                                    </button>
+                                                ) : (
+                                                    <div className="bg-slate-50 dark:bg-slate-900/80 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-left text-xs sm:text-sm animate-fade-in">
+                                                        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                                                            💡 {currentCard.example}
+                                                        </p>
+                                                        <p className="text-slate-500 dark:text-slate-400">
+                                                            {currentCard.exampleEn}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Input Mechanism: Typing or Multiple Choice */}
+                                            {feedback === null ? (
+                                                <div>
+                                                    {inputMode === 'typing' ? (
+                                                        <form 
+                                                            onSubmit={(e) => {
+                                                                e.preventDefault();
+                                                                if (userInput.trim()) handleAnswer();
+                                                            }}
+                                                            className="space-y-3"
+                                                        >
+                                                            <input
+                                                                ref={inputRef}
+                                                                type="text"
+                                                                value={userInput}
+                                                                onChange={(e) => setUserInput(e.target.value)}
+                                                                placeholder={direction === 'en_ko' ? 'Type in Korean...' : 'Type in English...'}
+                                                                className="w-full p-3.5 rounded-2xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-center font-medium text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            />
+                                                            <button
+                                                                type="submit"
+                                                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-md active:scale-[0.99]"
+                                                            >
+                                                                Submit Answer
+                                                            </button>
+                                                        </form>
+                                                    ) : (
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                            {mcOptions.map((opt, idx) => (
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={() => handleAnswer(opt)}
+                                                                    className="p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-400 font-semibold text-slate-800 dark:text-slate-200 text-center transition-all text-sm sm:text-base active:scale-[0.98]"
+                                                                >
+                                                                    {opt}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                /* Feedback & Next Card View */
+                                                <div className="space-y-4 animate-bounce-short">
+                                                    <div className={`p-4 rounded-2xl border text-center font-bold text-base ${
+                                                        feedback.isCorrect 
+                                                            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' 
+                                                            : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300'
+                                                    }`}>
+                                                        <div className="text-xl mb-1">
+                                                            {feedback.isCorrect ? '🎉' : '❌'}
+                                                        </div>
+                                                        <div>{feedback.text}</div>
+                                                    </div>
+
+                                                    <button
+                                                        onClick={nextCard}
+                                                        className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 rounded-2xl font-bold transition-all shadow-lg flex items-center justify-center space-x-2 active:scale-[0.99]"
+                                                    >
+                                                        <span>{currentIndex + 1 < sessionBatch.length ? 'Next Card' : 'Finish Class'}</span>
+                                                        <i className="fa-solid fa-arrow-right"></i>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* STATE 3: COMPLETION SCREEN */}
+                                {sessionState === 'completed' && (
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-100 dark:border-slate-700 p-8 max-w-lg mx-auto text-center animate-fade-in">
+                                        <div className="text-5xl mb-4">🏆</div>
+                                        <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white mb-2">Class Completed!</h2>
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Great job finishing this study batch.</p>
+
+                                        {/* Stats Summary Box */}
+                                        <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-700/70 mb-6">
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                                                    {sessionStats.correct}
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-semibold uppercase">Correct</div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                                                    {sessionStats.incorrect}
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-semibold uppercase">Needs Practice</div>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={() => setSessionState('setup')}
+                                            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold transition-all shadow-lg flex items-center justify-center space-x-2"
+                                        >
+                                            <i className="fa-solid fa-rotate-left"></i>
+                                            <span>Configure New Class</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                            </div>
+                        )}
+
+                        {/* ========================================================================= */}
+                        {/* TAB 2: HISTORY TAB (MASTERED WORDS & COMPLETED POOL)                       */}
+                        {/* ========================================================================= */}
+                        {activeTab === 'history' && (
+                            <div className="w-full max-w-3xl mx-auto">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                                            🏆 Mastered Vocabulary
+                                        </h2>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                            Words that have reached your mastery streak threshold ({masteryGoal} streaks).
+                                        </p>
+                                    </div>
+
+                                    {masteredWords.length > 0 && (
+                                        <button
+                                            onClick={resetAllMastered}
+                                            className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-semibold transition-all"
+                                        >
+                                            Reset All
+                                        </button>
+                                    )}
+                                </div>
+
+                                {masteredWords.length === 0 ? (
+                                    <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-8 text-center">
+                                        <div className="text-4xl mb-3">🌱</div>
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-1">No Mastered Words Yet</h3>
+                                        <p className="text-slate-500 dark:text-slate-400 text-xs max-w-xs mx-auto">
+                                            Complete classes in the Study tab and reach your target streak goal to add words to your trophy room.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {masteredWords.map(word => (
+                                            <div 
+                                                key={word.id} 
+                                                className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between"
+                                            >
+                                                <div>
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+                                                            Level {word.level}
+                                                        </span>
+                                                        <span className="text-xs text-amber-500 font-semibold flex items-center gap-1">
+                                                            🔥 {wordStreaks[word.id]} Streaks
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center space-x-2 my-1">
+                                                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">{word.korean}</h3>
+                                                        <button 
+                                                            onClick={() => speakKorean(word.korean)}
+                                                            className="text-slate-400 hover:text-blue-500 text-xs"
+                                                        >
+                                                            <i className="fa-solid fa-volume-high"></i>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-slate-600 dark:text-slate-300 text-sm font-medium mb-2">{word.english}</p>
+                                                    <p className="text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl">"{word.example}"</p>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => resetWordStreak(word.id)}
+                                                    className="mt-4 w-full py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:border-rose-300 dark:hover:border-rose-800 text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold transition-all"
+                                                >
+                                                    Reset to Active Pool
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                    </main>
+                </div>
+            );
         }
-      }, [darkMode]);
 
-      // Filter unmastered words
-      const activeWords = words.filter(w => {
-        const stats = progress[w.id] || { streak: 0 };
-        return stats.streak < masteryTarget;
-      });
-
-      // Slice into current batch/class
-      const currentBatch = activeWords.slice(0, batchSize);
-      const currentWord = currentBatch[currentIndex % currentBatch.length];
-
-      // Setup multiple choice options when card, direction, or mode changes
-      useEffect(() => {
-        if (!currentWord) return;
-        if (inputMode === 'multiple') {
-          const otherWords = words.filter(w => w.id !== currentWord.id);
-          const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random()).slice(0, 3);
-          const targetAnswer = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
-          const wrongAnswers = shuffledOthers.map(w => direction === 'en_to_kr' ? w.korean : w.english);
-          const allChoices = [targetAnswer, ...wrongAnswers].sort(() => 0.5 - Math.random());
-          setChoices(allChoices);
-        }
-        setUserInput('');
-        setFeedback(null);
-      }, [currentIndex, currentWord, direction, inputMode, words]);
-
-      if (currentBatch.length === 0 && words.length > 0) {
-        return (
-          <div className="max-w-md mx-auto mt-20 p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl text-center border border-slate-100 dark:border-slate-800">
-            <h2 className="text-2xl font-bold text-emerald-600 mb-4">🎉 Batch Complete!</h2>
-            <p className="text-slate-600 dark:text-slate-300 mb-6">You have successfully mastered all current active cards based on your {masteryTarget}-streak threshold.</p>
-            <button 
-              onClick={() => { setProgress({}); setCurrentIndex(0); }}
-              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
-            >
-              Reset Progress & Restart
-            </button>
-          </div>
-        );
-      }
-
-      const handleCheck = (submittedAnswer) => {
-        if (feedback !== null || !currentWord) return;
-
-        const target = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
-        const isCorrect = submittedAnswer.trim() === target.trim();
-
-        const wordId = currentWord.id;
-        const currentStats = progress[wordId] || { streak: 0 };
-        const newStreak = isCorrect ? currentStats.streak + 1 : 0;
-
-        setProgress({
-          ...progress,
-          [wordId]: { streak: newStreak }
-        });
-
-        setFeedback(isCorrect ? 'correct' : 'incorrect');
-      };
-
-      const handleNext = () => {
-        setFeedback(null);
-        setUserInput('');
-        setCurrentIndex(prev => prev + 1);
-      };
-
-      const handleImport = () => {
-        try {
-          const parsed = JSON.parse(importText);
-          if (Array.isArray(parsed)) {
-            setWords(parsed);
-            setProgress({});
-            setCurrentIndex(0);
-            setActiveTab('study');
-            alert(`Successfully imported ${parsed.length} words!`);
-          } else {
-            alert('JSON must be an array of objects.');
-          }
-        } catch (e) {
-          alert('Invalid JSON format. Please check your data.');
-        }
-      };
-
-      return (
-        <div className="max-w-lg mx-auto p-4 sm:p-6">
-          {/* Header */}
-          <header className="flex justify-between items-center mb-6 bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
-            <div>
-              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">TOPIK Flashcards</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Active Pool: {activeWords.length} / {words.length} words</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-medium transition"
-                title="Toggle Dark Mode"
-              >
-                {darkMode ? '☀️' : '🌙'}
-              </button>
-              <button 
-                onClick={() => setActiveTab('study')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'study' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-              >
-                Study
-              </button>
-              <button 
-                onClick={() => setActiveTab('import')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'import' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
-              >
-                Data
-              </button>
-            </div>
-          </header>
-
-          {activeTab === 'study' && currentWord && (
-            <main className="space-y-6">
-              {/* Settings Control Bar (Batch, Mastery, Direction, Input Mode) */}
-              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Mastery Streak Goal</label>
-                  <select 
-                    value={masteryTarget} 
-                    onChange={(e) => setMasteryTarget(parseInt(e.target.value, 10))}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
-                  >
-                    {[...Array(10)].map((_, i) => (
-                      <option key={i+1} value={i+1}>{i+1} correct streak</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Batch / Class Size</label>
-                  <select 
-                    value={batchSize} 
-                    onChange={(e) => { setBatchSize(parseInt(e.target.value, 10)); setCurrentIndex(0); }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
-                  >
-                    {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(size => (
-                      <option key={size} value={size}>{size} words/class</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Independent Setting 1: Direction */}
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Translation Direction</label>
-                  <select 
-                    value={direction} 
-                    onChange={(e) => setDirection(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
-                  >
-                    <option value="en_to_kr">English ➔ Korean</option>
-                    <option value="kr_to_en">Korean ➔ English</option>
-                  </select>
-                </div>
-
-                {/* Independent Setting 2: Input Mode */}
-                <div>
-                  <label className="block text-xs text-slate-400 mb-1">Input / Test Mode</label>
-                  <select 
-                    value={inputMode} 
-                    onChange={(e) => setInputMode(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
-                  >
-                    <option value="typing">Typing Answer</option>
-                    <option value="multiple">Multiple Choice</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Status Header Bar */}
-              <div className="flex justify-between items-center px-1">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Card {currentIndex + 1} of {currentBatch.length}
-                </span>
-                <span className="text-xs font-medium text-slate-400">
-                  Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
-                </span>
-              </div>
-
-              {/* Flashcard Box */}
-              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-md border border-slate-100 dark:border-slate-800 p-6 sm:p-8 text-center relative overflow-hidden transition-colors">
-                <div className="absolute top-4 left-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs px-2.5 py-1 rounded-full font-medium">
-                  Level {currentWord.level || 1}
-                </div>
-
-                <div className="my-8">
-                  <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight mb-2">
-                    {direction === 'en_to_kr' ? currentWord.english : currentWord.korean}
-                  </h2>
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-medium">
-                    {direction === 'en_to_kr' ? 'Translate to Korean' : 'Translate to English'}
-                  </p>
-                </div>
-
-                {/* Example sentence context */}
-                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-left mb-6 border border-slate-100 dark:border-slate-800 text-sm">
-                  <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">Example Context:</p>
-                  <p className="text-slate-800 dark:text-slate-200">
-                    {direction === 'en_to_kr' ? currentWord.example_en : currentWord.example_kr}
-                  </p>
-                  {feedback !== null && (
-                    <p className="text-blue-600 dark:text-blue-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                      {direction === 'en_to_kr' ? currentWord.example_kr : currentWord.example_en}
-                    </p>
-                  )}
-                </div>
-
-                {/* Input form or feedback state */}
-                {feedback === null ? (
-                  <div className="space-y-4">
-                    {inputMode === 'typing' ? (
-                      <form onSubmit={(e) => { e.preventDefault(); handleCheck(userInput); }}>
-                        <input
-                          type="text"
-                          value={userInput}
-                          onChange={(e) => setUserInput(e.target.value)}
-                          placeholder="Type your answer..."
-                          className="w-full p-4 border border-slate-200 dark:border-slate-700 rounded-xl text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 mb-3"
-                          autoFocus
-                        />
-                        <button 
-                          type="submit"
-                          className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
-                        >
-                          Check Answer
-                        </button>
-                      </form>
-                    ) : (
-                      <div className="grid grid-cols-2 gap-3">
-                        {choices.map((choice, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleCheck(choice)}
-                            className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-medium text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 hover:text-blue-700 dark:hover:text-blue-400 transition text-center"
-                          >
-                            {choice}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className={`p-6 rounded-2xl text-center space-y-4 ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 text-rose-800 dark:text-rose-300'}`}>
-                    <h3 className="text-xl font-bold">
-                      {feedback === 'correct' ? '✨ Correct!' : '❌ Incorrect'}
-                    </h3>
-                    <div className="text-sm">
-                      <p className="text-slate-500 dark:text-slate-400">Correct Answer:</p>
-                      <p className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                        {direction === 'en_to_kr' ? currentWord.korean : currentWord.english}
-                      </p>
-                    </div>
-                    <button
-                      onClick={handleNext}
-                      className="w-full py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-xl font-semibold shadow hover:bg-slate-800 dark:hover:bg-slate-700 transition"
-                    >
-                      Next Card ➔
-                    </button>
-                  </div>
-                )}
-              </div>
-            </main>
-          )}
-
-          {activeTab === 'import' && (
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Database & JSON Import</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Paste your custom JSON array of TOPIK words below to update your word bank instantly.
-              </p>
-              <textarea
-                rows="10"
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder={'[\n  {\n    "id": 1,\n    "korean": "학교",\n    "english": "school",\n    "level": 1,\n    "example_kr": "내일 학교에 갑니다.",\n    "example_en": "I go to school tomorrow."\n  }\n]'}
-                className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={handleImport}
-                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
-                >
-                  Import JSON Data
-                </button>
-                <button
-                  onClick={() => { setWords(INITIAL_WORDS); setProgress({}); alert('Reset to default starter words!'); }}
-                  className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm"
-                >
-                  Reset Default
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
+        // Render Application
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
