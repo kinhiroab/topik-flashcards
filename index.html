@@ -263,21 +263,21 @@
                     return;
                 }
 
-                // 3. Move to the next index, or loop back to the beginning if we reached the end of the batch array
-                let nextIdx = currentIndex + 1;
-                if (nextIdx >= sessionBatch.length) {
-                    nextIdx = 0; // Loop back to the start of the batch
-                }
+                // 3. Find the next unmastered card safely with an infinite-loop guard
+                let nextIdx = (currentIndex + 1) % sessionBatch.length;
+                let checkedCount = 0;
 
-                // 4. Find the next card. If the card at nextIdx is already mastered, 
-                // find the next available unmastered card in the batch.
-                let targetCard = sessionBatch[nextIdx];
-                while ((wordStreaks[targetCard.id] || 0) >= masteryGoal) {
+                while ((wordStreaks[sessionBatch[nextIdx].id] || 0) >= masteryGoal && checkedCount < sessionBatch.length) {
                     nextIdx = (nextIdx + 1) % sessionBatch.length;
-                    targetCard = sessionBatch[nextIdx];
+                    checkedCount++;
                 }
 
-                setCurrentIndex(nextIdx);
+                // 4. If we checked every card and everything is mastered, complete session
+                if (checkedCount >= sessionBatch.length) {
+                    setSessionState('completed');
+                } else {
+                    setCurrentIndex(nextIdx);
+                }
             };
 
             // Reset Word Streak in History Tab
