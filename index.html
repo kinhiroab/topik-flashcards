@@ -254,42 +254,32 @@
             };
 
             const nextCard = () => {
-                const currentCardObj = sessionBatch[currentIndex];
-                const currentStreak = (wordStreaks[currentCardObj.id] || 0);
-
-                // 1. Check if ANY unmastered cards (including the current one if it still needs streaks) remain in the batch
-                const unmasteredInBatch = sessionBatch.filter(w => {
+                // 1. Find all indices in the batch that still need work
+                const unmasteredIndices = [];
+                sessionBatch.forEach((w, idx) => {
                     const streak = (wordStreaks[w.id] || 0);
-                    return streak < masteryGoal;
+                    // Include it if it's below the goal, 
+                    // OR if it's the card we are currently sitting on and its state update hasn't propagated yet
+                    if (streak < masteryGoal) {
+                        unmasteredIndices.push(idx);
+                    }
                 });
 
-                // 2. If absolutely everything in the batch has reached the mastery goal, finish up!
-                if (unmasteredInBatch.length === 0) {
+                // 2. If no unmastered cards remain anywhere, finish up!
+                if (unmasteredIndices.length === 0) {
                     setSessionState('completed');
                     return;
                 }
 
-                // 3. Find the next unmastered card index safely, allowing loops back to the current card if it's still unmastered
+                // 3. Find the next index in sequence that is unmastered
                 let nextIdx = (currentIndex + 1) % sessionBatch.length;
-                let checkedCount = 0;
-
-                while (checkedCount < sessionBatch.length) {
-                    const candidate = sessionBatch[nextIdx];
-                    const candidateStreak = (wordStreaks[candidate.id] || 0);
-                    
-                    if (candidateStreak < masteryGoal) {
-                        break;
-                    }
-                    
+                
+                // Search forward until we find an unmastered index
+                while (!unmasteredIndices.includes(nextIdx)) {
                     nextIdx = (nextIdx + 1) % sessionBatch.length;
-                    checkedCount++;
                 }
 
-                if (checkedCount >= sessionBatch.length) {
-                    setSessionState('completed');
-                } else {
-                    setCurrentIndex(nextIdx);
-                }
+                setCurrentIndex(nextIdx);
             };
             
             // Reset Word Streak in History Tab
