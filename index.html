@@ -1584,21 +1584,34 @@
                     }));
                 }
             };
-        
-            // Progress to Next Card or Cycle Until All Words in Batch Achieve Target Streak
-            const nextCard = () => {
-                // Filter active session batch for words that still haven't met the target mastery goal
-                const unmastered = sessionBatch.filter(w => (wordStreaks[w.id] || 0) < masteryGoal);
+
+            function nextCard() {
+                // 1. Get all cards that are not yet mastered
+                const unmastered = cards.filter(w => !w.mastered);
             
+                // If everything is mastered, handle completion
                 if (unmastered.length === 0) {
-                    setSessionState('completed');
-                } else {
-                    // Find next word in cycle from remaining unmastered cards
-                    const nextCardCandidate = unmastered.find(w => w.id !== currentCard.id) || unmastered[0];
-                    const nextIdx = sessionBatch.findIndex(w => w.id === nextCardCandidate.id);
-                    setCurrentIndex(nextIdx);
+                    showCompletionScreen();
+                    return;
                 }
-            };
+            
+                // 2. If there's only 1 unmastered card left, just use it
+                if (unmastered.length === 1) {
+                    currentCard = unmastered[0];
+                    displayCard(currentCard);
+                    return;
+                }
+            
+                // 3. Filter out the current card so we don't repeat the exact same card immediately
+                const otherUnmastered = unmastered.filter(w => w.id !== currentCard.id);
+            
+                // 4. Pick a completely random index from the remaining pool
+                const randomIndex = Math.floor(Math.random() * otherUnmastered.length);
+                currentCard = otherUnmastered[randomIndex];
+            
+                // 5. Render the card to the UI
+                displayCard(currentCard);
+            }
 
             // Reset Word Streak in History Tab
             const resetWordStreak = (id) => {
