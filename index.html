@@ -254,27 +254,13 @@
             };
 
             const nextCard = () => {
-                // 1. Filter out cards in the current batch that have reached your mastery goal
-                const unmasteredBatch = sessionBatch.filter(w => (wordStreaks[w.id] || 0) < masteryGoal);
-
-                // 2. If everything in the batch is now mastered, check if we're completely done
-                if (unmasteredBatch.length === 0) {
+                const nextIdx = currentIndex + 1;
+                // If we've gone through all cards in this batch, complete the session
+                if (nextIdx >= sessionBatch.length) {
                     setSessionState('completed');
-                    return;
+                } else {
+                    setCurrentIndex(nextIdx);
                 }
-
-                // 3. Filter out the current card so we don't repeat the exact same one immediately
-                const otherUnmastered = unmasteredBatch.filter(w => w.id !== currentCard.id);
-
-                // If there's only 1 card left total, loop back to it, otherwise pick randomly from the rest
-                const nextPool = otherUnmastered.length > 0 ? otherUnmastered : unmasteredBatch;
-                const randomIndex = Math.floor(Math.random() * nextPool.length);
-                
-                // Find where this randomly selected card lives in your sessionBatch array to update currentIndex
-                const nextTargetCard = nextPool[randomIndex];
-                const newIndex = sessionBatch.findIndex(w => w.id === nextTargetCard.id);
-
-                setCurrentIndex(newIndex);
             };
 
             // Reset Word Streak in History Tab
