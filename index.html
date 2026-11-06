@@ -50,12 +50,15 @@
 <body class="h-full bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-200">
     <div id="root" class="h-full"></div>
 
+    <!-- Load external vocabulary dataset -->
+    <script src="vocab.js"></script>
+
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
     
-//INITIAL_WORDS
+        const INITIAL_WORDS = window.TOPIK_VOCAB || [];
 
-    function App() {
+        function App() {
             // Local Storage Persistence Key
             const STORAGE_KEY = 'topik_flashcards_progress_v2';
 
@@ -378,7 +381,7 @@
                                                     1. Select TOPIK Levels
                                                 </label>
                                                 <div className="grid grid-cols-3 gap-2">
-                                                    {[1, 2, 3].map(lvl => {
+                                                    {[1, 2, 3, 4].map(lvl => {
                                                         const isSelected = selectedLevels.includes(lvl);
                                                         return (
                                                             <button
