@@ -16,7 +16,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel for JSX -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-200">
   <div id="root"></div>
@@ -1550,12 +1550,14 @@
         return localStorage.getItem('topik_dark_mode') === 'true';
       });
 
-      const [activeTab, setActiveTab] = useState('study'); // study, import, stats
+      const [activeTab, setActiveTab] = useState('study'); // study, import
       const [currentIndex, setCurrentIndex] = useState(0);
-      const [direction, setDirection] = useState('en_to_kr'); // en_to_kr or kr_to_en
-      const [inputMode, setInputMode] = useState('typing'); // typing or multiple
+      
+      // Two completely separate settings:
+      const [direction, setDirection] = useState('en_to_kr'); // 'en_to_kr' or 'kr_to_en'
+      const [inputMode, setInputMode] = useState('typing'); // 'typing' or 'multiple'
+
       const [userInput, setUserInput] = useState('');
-      const [selectedChoice, setSelectedChoice] = useState(null);
       const [feedback, setFeedback] = useState(null); // null, 'correct', 'incorrect'
       const [choices, setChoices] = useState([]);
       const [importText, setImportText] = useState('');
@@ -1596,7 +1598,7 @@
       const currentBatch = activeWords.slice(0, batchSize);
       const currentWord = currentBatch[currentIndex % currentBatch.length];
 
-      // Setup multiple choice options when card changes
+      // Setup multiple choice options when card, direction, or mode changes
       useEffect(() => {
         if (!currentWord) return;
         if (inputMode === 'multiple') {
@@ -1608,7 +1610,6 @@
           setChoices(allChoices);
         }
         setUserInput('');
-        setSelectedChoice(null);
         setFeedback(null);
       }, [currentIndex, currentWord, direction, inputMode, words]);
 
@@ -1648,7 +1649,6 @@
       const handleNext = () => {
         setFeedback(null);
         setUserInput('');
-        setSelectedChoice(null);
         setCurrentIndex(prev => prev + 1);
       };
 
@@ -1702,7 +1702,7 @@
 
           {activeTab === 'study' && currentWord && (
             <main className="space-y-6">
-              {/* Settings Control Bar */}
+              {/* Settings Control Bar (Batch, Mastery, Direction, Input Mode) */}
               <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Mastery Streak Goal</label>
@@ -1728,27 +1728,42 @@
                     ))}
                   </select>
                 </div>
+
+                {/* Independent Setting 1: Direction */}
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Translation Direction</label>
+                  <select 
+                    value={direction} 
+                    onChange={(e) => setDirection(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
+                  >
+                    <option value="en_to_kr">English ➔ Korean</option>
+                    <option value="kr_to_en">Korean ➔ English</option>
+                  </select>
+                </div>
+
+                {/* Independent Setting 2: Input Mode */}
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Input / Test Mode</label>
+                  <select 
+                    value={inputMode} 
+                    onChange={(e) => setInputMode(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
+                  >
+                    <option value="typing">Typing Answer</option>
+                    <option value="multiple">Multiple Choice</option>
+                  </select>
+                </div>
               </div>
 
-              {/* Mode & Progress Bar Controls */}
-              <div className="flex justify-between items-center px-1 gap-2 flex-wrap">
-                <button 
-                  onClick={() => setDirection(prev => prev === 'en_to_kr' ? 'kr_to_en' : 'en_to_kr')}
-                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-900"
-                >
-                  Direction: {direction === 'en_to_kr' ? 'English ➔ Korean' : 'Korean ➔ English'}
-                </button>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => setInputMode(prev => prev === 'typing' ? 'multiple' : 'typing')}
-                    className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 px-3 py-1.5 rounded-full border border-purple-100 dark:border-purple-900"
-                  >
-                    Input: {inputMode === 'typing' ? 'Typing' : 'Multiple Choice'}
-                  </button>
-                  <span className="text-xs font-medium text-slate-400">
-                    Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
-                  </span>
-                </div>
+              {/* Status Header Bar */}
+              <div className="flex justify-between items-center px-1">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Card {currentIndex + 1} of {currentBatch.length}
+                </span>
+                <span className="text-xs font-medium text-slate-400">
+                  Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
+                </span>
               </div>
 
               {/* Flashcard Box */}
