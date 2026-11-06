@@ -1653,12 +1653,11 @@
             // Start New Class Session
             const startSession = () => {
                 if (eligibleWords.length === 0) return;
-
-                // Shuffle eligible words
+            
                 const shuffled = [...eligibleWords].sort(() => Math.random() - 0.5);
                 const count = Math.min(batchSize, shuffled.length);
                 const selectedBatch = shuffled.slice(0, count);
-
+            
                 setSessionBatch(selectedBatch);
                 setCurrentIndex(0);
                 setSessionStats({ correct: 0, incorrect: 0 });
@@ -1666,10 +1665,51 @@
                 setUserInput('');
                 setShowHint(false);
                 setSessionState('active');
-
-                // Generate MC Options if starting on Card 0
+            
                 if (inputMode === 'mc' && selectedBatch.length > 0) {
                     generateMCOptions(selectedBatch[0], selectedBatch);
+                }
+            };
+            
+            // Submit Answer Logic
+            const handleAnswer = (selectedAnswer) => {
+                if (feedback !== null) return;
+            
+                const currentCard = sessionBatch[currentIndex];
+                const correctAnswer = direction === 'en_ko' ? currentCard.korean : currentCard.english;
+            
+                let isRight = false;
+                if (inputMode === 'mc') {
+                    isRight = selectedAnswer === correctAnswer;
+                } else {
+                    const cleanUser = userInput.trim().toLowerCase();
+                    const cleanTarget = correctAnswer.trim().toLowerCase();
+                    isRight = cleanUser === cleanTarget;
+                }
+            
+                if (isRight) {
+                    const newStreak = (wordStreaks[currentCard.id] || 0) + 1;
+                    setFeedback({ isCorrect: true, text: 'Correct! 잘했어요!' });
+                    setSessionStats(prev => ({ ...prev, correct: prev.correct + 1 }));
+                    
+                    setWordStreaks(prev => ({
+                        ...prev,
+                        [currentCard.id]: newStreak
+                    }));
+            
+                    if (direction === 'en_ko') speakKorean(currentCard.korean);
+                } else {
+                    setFeedback({ 
+                        isCorrect: false, 
+                        text: `Incorrect. Correct Answer: ${correctAnswer}` 
+                    });
+                    setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
+                    
+                    // Reset streak back to 0 on incorrect response
+                    setWordStreaks(prev => ({
+                        ...prev,
+                        [currentCard.id]: 0
+                    }));
                 }
             };
 
@@ -1754,12 +1794,18 @@
                 }
             };
 
-            // Progress to Next Card or Complete Session
+            // Progress to Next Card or Cycle Until All Words in Batch Achieve Target Streak
             const nextCard = () => {
-                if (currentIndex + 1 < sessionBatch.length) {
-                    setCurrentIndex(currentIndex + 1);
-                } else {
+                // Filter active session batch for words that still haven't met the target mastery goal
+                const unmastered = sessionBatch.filter(w => (wordStreaks[w.id] || 0) < masteryGoal);
+            
+                if (unmastered.length === 0) {
                     setSessionState('completed');
+                } else {
+                    // Find next word in cycle from remaining unmastered cards
+                    const nextCardCandidate = unmastered.find(w => w.id !== currentCard.id) || unmastered[0];
+                    const nextIdx = sessionBatch.findIndex(w => w.id === nextCardCandidate.id);
+                    setCurrentIndex(nextIdx);
                 }
             };
 
