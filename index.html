@@ -193,33 +193,11 @@
                 setMcOptions(allChoices);
             };
 
-            // Prepare Next Card in Session
-            useEffect(() => {
-                if (sessionState === 'active' && sessionBatch.length > 0 && currentIndex < sessionBatch.length) {
-                    const currentCard = sessionBatch[currentIndex];
-                    setUserInput('');
-                    setFeedback(null);
-                    setShowHint(false);
-
-                    if (inputMode === 'mc') {
-                        generateMCOptions(currentCard, sessionBatch);
-                    } else {
-                        // Focus input box for typing
-                        setTimeout(() => inputRef.current?.focus(), 100);
-                    }
-
-                    // Auto speak Korean term if prompt is Korean
-                    if (direction === 'ko_en') {
-                        speakKorean(currentCard.korean);
-                    }
-                }
-            }, [currentIndex, sessionState]);
-
-                    // Submit Answer Logic
+            // Submit Answer Logic
             const handleAnswer = (selectedAnswer) => {
                 if (feedback !== null) return;
+                if (!currentCard) return;
             
-                const currentCard = sessionBatch[currentIndex];
                 const correctAnswer = direction === 'en_ko' ? currentCard.korean : currentCard.english;
             
                 let isRight = false;
@@ -249,7 +227,6 @@
                     });
                     setSessionStats(prev => ({ ...prev, incorrect: prev.incorrect + 1 }));
                     
-                    // Reset streak back to 0 on incorrect response
                     setWordStreaks(prev => ({
                         ...prev,
                         [currentCard.id]: 0
@@ -316,8 +293,6 @@
                     setWordStreaks({});
                 }
             };
-
-            const currentCard = sessionBatch[currentIndex];
 
             return (
                 <div className="flex flex-col h-full min-h-screen bg-slate-100 dark:bg-slate-900">
@@ -683,7 +658,7 @@
                                                         onClick={nextCard}
                                                         className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 rounded-2xl font-bold transition-all shadow-lg flex items-center justify-center space-x-2 active:scale-[0.99]"
                                                     >
-                                                        <span>{currentIndex + 1 < sessionBatch.length ? 'Next Card' : 'Finish Class'}</span>
+                                                        <span>Next Card</span>
                                                         <i className="fa-solid fa-arrow-right"></i>
                                                     </button>
                                                 </div>
