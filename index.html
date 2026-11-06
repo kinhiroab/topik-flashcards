@@ -254,25 +254,42 @@
             };
 
             const nextCard = () => {
-                // 1. Find all cards in our current batch that haven't reached the mastery goal yet
-                const unmasteredInBatch = sessionBatch.filter(w => (wordStreaks[w.id] || 0) < masteryGoal);
+                const currentCardObj = sessionBatch[currentIndex];
+                const currentStreak = (wordStreaks[currentCardObj.id] || 0);
 
-                // 2. If all cards in the batch have hit the goal, complete the session!
+                // 1. Check how many cards in the batch are STILL unmastered 
+                // (excluding the current card if it just hit the goal)
+                const unmasteredInBatch = sessionBatch.filter(w => {
+                    const streak = (wordStreaks[w.id] || 0);
+                    // If this is the current card and it reached the goal, treat it as mastered
+                    if (w.id === currentCardObj.id && streak >= masteryGoal) return false;
+                    return streak < masteryGoal;
+                });
+
+                // 2. If no unmastered cards remain, complete the session immediately!
                 if (unmasteredInBatch.length === 0) {
                     setSessionState('completed');
                     return;
                 }
 
-                // 3. Find the next unmastered card safely with an infinite-loop guard
+                // 3. Otherwise, find the next unmastered card index safely
                 let nextIdx = (currentIndex + 1) % sessionBatch.length;
                 let checkedCount = 0;
 
-                while ((wordStreaks[sessionBatch[nextIdx].id] || 0) >= masteryGoal && checkedCount < sessionBatch.length) {
+                while (checkedCount < sessionBatch.length) {
+                    const candidate = sessionBatch[nextIdx];
+                    const candidateStreak = (wordStreaks[candidate.id] || 0);
+                    
+                    // If this candidate is unmastered (and not the current card that just finished), stop here
+                    if (candidate.id !== currentCardObj.id && candidateStreak < masteryGoal) {
+                        break;
+                    }
+                    
                     nextIdx = (nextIdx + 1) % sessionBatch.length;
                     checkedCount++;
                 }
 
-                // 4. If we checked every card and everything is mastered, complete session
+                // Safety fallback if loop checks everything
                 if (checkedCount >= sessionBatch.length) {
                     setSessionState('completed');
                 } else {
