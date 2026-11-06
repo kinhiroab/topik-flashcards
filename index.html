@@ -1623,7 +1623,7 @@
 
             // Calculate active pool of words based on level & mastery
             const eligibleWords = useMemo(() => {
-                return INITIAL_VOCABULARY.filter(word => {
+                return INITIAL_WORDS.filter(word => {
                     const isLevelMatch = selectedLevels.includes(word.level);
                     const currentStreak = wordStreaks[word.id] || 0;
                     const isNotMastered = currentStreak < masteryGoal;
@@ -1633,7 +1633,7 @@
 
             // Mastered words array for History Tab
             const masteredWords = useMemo(() => {
-                return INITIAL_VOCABULARY.filter(word => {
+                return INITIAL_WORDS.filter(word => {
                     const currentStreak = wordStreaks[word.id] || 0;
                     return currentStreak >= masteryGoal;
                 });
@@ -1678,7 +1678,7 @@
                 const targetText = direction === 'en_ko' ? targetCard.korean : targetCard.english;
 
                 // Grab pool of all available terms for distractors
-                const pool = INITIAL_VOCABULARY.filter(w => w.id !== targetCard.id);
+                const pool = INITIAL_WORDS.filter(w => w.id !== targetCard.id);
                 const shuffledPool = [...pool].sort(() => Math.random() - 0.5);
 
                 const distractors = shuffledPool.slice(0, 3).map(w => 
