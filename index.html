@@ -7,18 +7,23 @@
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/kinhiroab/topik-flashcards/ac644c274c03641969e001ad6ae5a93974cfeec4/tiger-icon.png">
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+    }
+  </script>
   <!-- React & ReactDOM -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-200">
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect } = React;
-
+    
     const INITIAL_WORDS = [
       { id: 1, korean: "가게", english: "store", level: 1, example_kr: "가게에서 과자를 샀습니다.", example_en: "I bought snacks at the store." },
       { id: 2, korean: "가격", english: "price", level: 1, example_kr: "이 옷은 가격이 싸요.", example_en: "This clothing item is cheap in price." },
@@ -1521,7 +1526,7 @@
       { id: 1499, korean: "기본단어1499", english: "basic word 1499", level: 2, example_kr: "이것은 기본단어1499 예문입니다.", example_en: "This is an example sentence for basic word 1499." },
       { id: 1500, korean: "기본단어1500", english: "basic word 1500", level: 2, example_kr: "이것은 기본단어1500 예문입니다.", example_en: "This is an example sentence for basic word 1500." },
     ];
-    
+
     function App() {
       const [words, setWords] = useState(() => {
         const saved = localStorage.getItem('topik_words');
@@ -1541,16 +1546,21 @@
         return parseInt(localStorage.getItem('topik_batch_size') || '10', 10);
       });
 
+      const [darkMode, setDarkMode] = useState(() => {
+        return localStorage.getItem('topik_dark_mode') === 'true';
+      });
+
       const [activeTab, setActiveTab] = useState('study'); // study, import, stats
       const [currentIndex, setCurrentIndex] = useState(0);
       const [direction, setDirection] = useState('en_to_kr'); // en_to_kr or kr_to_en
+      const [inputMode, setInputMode] = useState('typing'); // typing or multiple
       const [userInput, setUserInput] = useState('');
       const [selectedChoice, setSelectedChoice] = useState(null);
       const [feedback, setFeedback] = useState(null); // null, 'correct', 'incorrect'
       const [choices, setChoices] = useState([]);
       const [importText, setImportText] = useState('');
 
-      // Save state
+      // Save state & Dark mode class toggling
       useEffect(() => {
         localStorage.setItem('topik_words', JSON.stringify(words));
       }, [words]);
@@ -1567,6 +1577,15 @@
         localStorage.setItem('topik_batch_size', batchSize.toString());
       }, [batchSize]);
 
+      useEffect(() => {
+        localStorage.setItem('topik_dark_mode', darkMode);
+        if (darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }, [darkMode]);
+
       // Filter unmastered words
       const activeWords = words.filter(w => {
         const stats = progress[w.id] || { streak: 0 };
@@ -1580,22 +1599,24 @@
       // Setup multiple choice options when card changes
       useEffect(() => {
         if (!currentWord) return;
-        const otherWords = words.filter(w => w.id !== currentWord.id);
-        const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random()).slice(0, 3);
-        const targetAnswer = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
-        const wrongAnswers = shuffledOthers.map(w => direction === 'en_to_kr' ? w.korean : w.english);
-        const allChoices = [targetAnswer, ...wrongAnswers].sort(() => 0.5 - Math.random());
-        setChoices(allChoices);
+        if (inputMode === 'multiple') {
+          const otherWords = words.filter(w => w.id !== currentWord.id);
+          const shuffledOthers = [...otherWords].sort(() => 0.5 - Math.random()).slice(0, 3);
+          const targetAnswer = direction === 'en_to_kr' ? currentWord.korean : currentWord.english;
+          const wrongAnswers = shuffledOthers.map(w => direction === 'en_to_kr' ? w.korean : w.english);
+          const allChoices = [targetAnswer, ...wrongAnswers].sort(() => 0.5 - Math.random());
+          setChoices(allChoices);
+        }
         setUserInput('');
         setSelectedChoice(null);
         setFeedback(null);
-      }, [currentIndex, currentWord, direction]);
+      }, [currentIndex, currentWord, direction, inputMode, words]);
 
       if (currentBatch.length === 0 && words.length > 0) {
         return (
-          <div className="max-w-md mx-auto mt-20 p-8 bg-white rounded-2xl shadow-xl text-center">
+          <div className="max-w-md mx-auto mt-20 p-8 bg-white dark:bg-slate-900 rounded-2xl shadow-xl text-center border border-slate-100 dark:border-slate-800">
             <h2 className="text-2xl font-bold text-emerald-600 mb-4">🎉 Batch Complete!</h2>
-            <p className="text-slate-600 mb-6">You have successfully mastered all current active cards based on your {masteryTarget}-streak threshold.</p>
+            <p className="text-slate-600 dark:text-slate-300 mb-6">You have successfully mastered all current active cards based on your {masteryTarget}-streak threshold.</p>
             <button 
               onClick={() => { setProgress({}); setCurrentIndex(0); }}
               className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow hover:bg-blue-700 transition"
@@ -1651,21 +1672,28 @@
       return (
         <div className="max-w-lg mx-auto p-4 sm:p-6">
           {/* Header */}
-          <header className="flex justify-between items-center mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+          <header className="flex justify-between items-center mb-6 bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800">
             <div>
-              <h1 className="text-xl font-bold text-slate-800">TOPIK Flashcards</h1>
-              <p className="text-xs text-slate-500">Active Pool: {activeWords.length} / {words.length} words</p>
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">TOPIK Flashcards</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Active Pool: {activeWords.length} / {words.length} words</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-medium transition"
+                title="Toggle Dark Mode"
+              >
+                {darkMode ? '☀️' : '🌙'}
+              </button>
               <button 
                 onClick={() => setActiveTab('study')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'study' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'study' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
               >
                 Study
               </button>
               <button 
                 onClick={() => setActiveTab('import')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'import' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'import' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
               >
                 Data
               </button>
@@ -1675,13 +1703,13 @@
           {activeTab === 'study' && currentWord && (
             <main className="space-y-6">
               {/* Settings Control Bar */}
-              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 grid grid-cols-2 gap-4 text-sm">
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Mastery Streak Goal</label>
                   <select 
                     value={masteryTarget} 
                     onChange={(e) => setMasteryTarget(parseInt(e.target.value, 10))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-medium"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
                   >
                     {[...Array(10)].map((_, i) => (
                       <option key={i+1} value={i+1}>{i+1} correct streak</option>
@@ -1693,7 +1721,7 @@
                   <select 
                     value={batchSize} 
                     onChange={(e) => { setBatchSize(parseInt(e.target.value, 10)); setCurrentIndex(0); }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-medium"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 rounded-lg p-2 font-medium"
                   >
                     {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(size => (
                       <option key={size} value={size}>{size} words/class</option>
@@ -1702,27 +1730,35 @@
                 </div>
               </div>
 
-              {/* Mode & Progress Bar */}
-              <div className="flex justify-between items-center px-1">
+              {/* Mode & Progress Bar Controls */}
+              <div className="flex justify-between items-center px-1 gap-2 flex-wrap">
                 <button 
                   onClick={() => setDirection(prev => prev === 'en_to_kr' ? 'kr_to_en' : 'en_to_kr')}
-                  className="text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"
+                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-900"
                 >
-                  Mode: {direction === 'en_to_kr' ? 'English ➔ Korean (Type)' : 'Korean ➔ English'}
+                  Direction: {direction === 'en_to_kr' ? 'English ➔ Korean' : 'Korean ➔ English'}
                 </button>
-                <span className="text-xs font-medium text-slate-400">
-                  Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setInputMode(prev => prev === 'typing' ? 'multiple' : 'typing')}
+                    className="text-xs font-semibold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 px-3 py-1.5 rounded-full border border-purple-100 dark:border-purple-900"
+                  >
+                    Input: {inputMode === 'typing' ? 'Typing' : 'Multiple Choice'}
+                  </button>
+                  <span className="text-xs font-medium text-slate-400">
+                    Streak: {progress[currentWord.id]?.streak || 0} / {masteryTarget}
+                  </span>
+                </div>
               </div>
 
               {/* Flashcard Box */}
-              <div className="bg-white rounded-3xl shadow-md border border-slate-100 p-6 sm:p-8 text-center relative overflow-hidden">
-                <div className="absolute top-4 left-4 bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full font-medium">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-md border border-slate-100 dark:border-slate-800 p-6 sm:p-8 text-center relative overflow-hidden transition-colors">
+                <div className="absolute top-4 left-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs px-2.5 py-1 rounded-full font-medium">
                   Level {currentWord.level || 1}
                 </div>
 
                 <div className="my-8">
-                  <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 tracking-tight mb-2">
+                  <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight mb-2">
                     {direction === 'en_to_kr' ? currentWord.english : currentWord.korean}
                   </h2>
                   <p className="text-xs uppercase tracking-widest text-slate-400 font-medium">
@@ -1730,14 +1766,14 @@
                   </p>
                 </div>
 
-                {/* Example sentence context (hiding target language during test) */}
-                <div className="bg-slate-50 p-4 rounded-xl text-left mb-6 border border-slate-100 text-sm">
-                  <p className="text-slate-500 font-medium mb-1">Example Context:</p>
-                  <p className="text-slate-800">
+                {/* Example sentence context */}
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-left mb-6 border border-slate-100 dark:border-slate-800 text-sm">
+                  <p className="text-slate-500 dark:text-slate-400 font-medium mb-1">Example Context:</p>
+                  <p className="text-slate-800 dark:text-slate-200">
                     {direction === 'en_to_kr' ? currentWord.example_en : currentWord.example_kr}
                   </p>
                   {feedback !== null && (
-                    <p className="text-blue-600 mt-2 pt-2 border-t border-slate-200">
+                    <p className="text-blue-600 dark:text-blue-400 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
                       {direction === 'en_to_kr' ? currentWord.example_kr : currentWord.example_en}
                     </p>
                   )}
@@ -1746,14 +1782,14 @@
                 {/* Input form or feedback state */}
                 {feedback === null ? (
                   <div className="space-y-4">
-                    {direction === 'en_to_kr' ? (
+                    {inputMode === 'typing' ? (
                       <form onSubmit={(e) => { e.preventDefault(); handleCheck(userInput); }}>
                         <input
                           type="text"
                           value={userInput}
                           onChange={(e) => setUserInput(e.target.value)}
-                          placeholder="Type in Korean (Hangul)..."
-                          className="w-full p-4 border border-slate-200 rounded-xl text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 mb-3"
+                          placeholder="Type your answer..."
+                          className="w-full p-4 border border-slate-200 dark:border-slate-700 rounded-xl text-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 mb-3"
                           autoFocus
                         />
                         <button 
@@ -1769,7 +1805,7 @@
                           <button
                             key={idx}
                             onClick={() => handleCheck(choice)}
-                            className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition text-center"
+                            className="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-medium text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 hover:text-blue-700 dark:hover:text-blue-400 transition text-center"
                           >
                             {choice}
                           </button>
@@ -1778,19 +1814,19 @@
                     )}
                   </div>
                 ) : (
-                  <div className={`p-6 rounded-2xl text-center space-y-4 ${feedback === 'correct' ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' : 'bg-rose-50 border border-rose-100 text-rose-800'}`}>
+                  <div className={`p-6 rounded-2xl text-center space-y-4 ${feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900 text-rose-800 dark:text-rose-300'}`}>
                     <h3 className="text-xl font-bold">
                       {feedback === 'correct' ? '✨ Correct!' : '❌ Incorrect'}
                     </h3>
                     <div className="text-sm">
-                      <p className="text-slate-500">Correct Answer:</p>
-                      <p className="text-lg font-bold text-slate-800">
+                      <p className="text-slate-500 dark:text-slate-400">Correct Answer:</p>
+                      <p className="text-lg font-bold text-slate-800 dark:text-slate-100">
                         {direction === 'en_to_kr' ? currentWord.korean : currentWord.english}
                       </p>
                     </div>
                     <button
                       onClick={handleNext}
-                      className="w-full py-3 bg-slate-900 text-white rounded-xl font-semibold shadow hover:bg-slate-800 transition"
+                      className="w-full py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-xl font-semibold shadow hover:bg-slate-800 dark:hover:bg-slate-700 transition"
                     >
                       Next Card ➔
                     </button>
@@ -1801,9 +1837,9 @@
           )}
 
           {activeTab === 'import' && (
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 space-y-4">
-              <h2 className="text-lg font-bold text-slate-800">Database & JSON Import</h2>
-              <p className="text-xs text-slate-500">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">Database & JSON Import</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Paste your custom JSON array of TOPIK words below to update your word bank instantly.
               </p>
               <textarea
@@ -1811,7 +1847,7 @@
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
                 placeholder={'[\n  {\n    "id": 1,\n    "korean": "학교",\n    "english": "school",\n    "level": 1,\n    "example_kr": "내일 학교에 갑니다.",\n    "example_en": "I go to school tomorrow."\n  }\n]'}
-                className="w-full p-3 border border-slate-200 rounded-xl font-mono text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <div className="flex gap-3">
                 <button
@@ -1822,7 +1858,7 @@
                 </button>
                 <button
                   onClick={() => { setWords(INITIAL_WORDS); setProgress({}); alert('Reset to default starter words!'); }}
-                  className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-medium hover:bg-slate-200 transition text-sm"
+                  className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm"
                 >
                   Reset Default
                 </button>
