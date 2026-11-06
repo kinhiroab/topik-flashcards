@@ -84,11 +84,12 @@
             const [masteryGoal, setMasteryGoal] = useState(3); // Streak target to master a word
             const [batchSize, setBatchSize] = useState(10); // Batch limit: 5, 10, 20, 50, 999 (All)
 
-            // --- Active Session State ---
+            // --- Active Session State (Queue Pattern) ---
             const [sessionState, setSessionState] = useState('setup'); // 'setup' | 'active' | 'completed'
-            const [sessionBatch, setSessionBatch] = useState([]);
-            const [currentIndex, setCurrentIndex] = useState(0);
+            const [sessionQueue, setSessionQueue] = useState([]);
+            const [currentCard, setCurrentCard] = useState(null);
             const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
+            const [totalBatchSize, setTotalBatchSize] = useState(0);
 
             // --- Active Card Interaction State ---
             const [userInput, setUserInput] = useState('');
@@ -152,16 +153,19 @@
                 }
             };
 
-            // Start New Class Session
+            // Start New Class Session using a Dynamic Queue
             const startSession = () => {
                 if (eligibleWords.length === 0) return;
             
+                // Randomize eligible words and slice out the batch size
                 const shuffled = [...eligibleWords].sort(() => Math.random() - 0.5);
                 const count = Math.min(batchSize, shuffled.length);
                 const selectedBatch = shuffled.slice(0, count);
             
-                setSessionBatch(selectedBatch);
-                setCurrentIndex(0);
+                // Initialize the queue with our batch cards
+                setSessionQueue(selectedBatch);
+                setCurrentCard(selectedBatch[0] || null);
+                setTotalBatchSize(selectedBatch.length);
                 setSessionStats({ correct: 0, incorrect: 0 });
                 setFeedback(null);
                 setUserInput('');
@@ -253,33 +257,48 @@
                 }
             };
 
+            // Queue-based Next Card Logic
             const nextCard = () => {
-                // 1. Find all indices in the batch that still need work
-                const unmasteredIndices = [];
-                sessionBatch.forEach((w, idx) => {
-                    const streak = (wordStreaks[w.id] || 0);
-                    // Include it if it's below the goal, 
-                    // OR if it's the card we are currently sitting on and its state update hasn't propagated yet
-                    if (streak < masteryGoal) {
-                        unmasteredIndices.push(idx);
-                    }
-                });
+                if (!currentCard) return;
 
-                // 2. If no unmastered cards remain anywhere, finish up!
-                if (unmasteredIndices.length === 0) {
+                // Evaluate what the card's streak will be after this turn
+                // (Note: wordStreaks state has already been updated in handleAnswer)
+                const updatedStreak = (wordStreaks[currentCard.id] || 0);
+
+                // Clone the current queue, removing the card we just finished
+                const remainingQueue = [...sessionQueue.slice(1)];
+
+                // If the card hasn't reached the mastery goal yet, push it back into the queue for re-practice!
+                if (updatedStreak < masteryGoal) {
+                    remainingQueue.push(currentCard);
+                }
+
+                // If the queue is empty, the class is finished!
+                if (remainingQueue.length === 0) {
                     setSessionState('completed');
+                    setCurrentCard(null);
                     return;
                 }
 
-                // 3. Find the next index in sequence that is unmastered
-                let nextIdx = (currentIndex + 1) % sessionBatch.length;
-                
-                // Search forward until we find an unmastered index
-                while (!unmasteredIndices.includes(nextIdx)) {
-                    nextIdx = (nextIdx + 1) % sessionBatch.length;
+                // Otherwise, take the next card from the front of the queue
+                const nextTarget = remainingQueue[0];
+                setSessionQueue(remainingQueue);
+                setCurrentCard(nextTarget);
+
+                // Reset card UI interaction state
+                setUserInput('');
+                setFeedback(null);
+                setShowHint(false);
+
+                if (inputMode === 'mc') {
+                    generateMCOptions(nextTarget, remainingQueue);
+                } else {
+                    setTimeout(() => inputRef.current?.focus(), 100);
                 }
 
-                setCurrentIndex(nextIdx);
+                if (direction === 'ko_en') {
+                    speakKorean(nextTarget.korean);
+                }
             };
             
             // Reset Word Streak in History Tab
