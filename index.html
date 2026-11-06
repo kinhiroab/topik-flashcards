@@ -257,27 +257,19 @@
                 const currentCardObj = sessionBatch[currentIndex];
                 const currentStreak = (wordStreaks[currentCardObj.id] || 0);
 
-                // 1. If the current card hasn't hit the goal yet, KEEP IT GOING! 
-                // Do not end the class or switch cards; let it loop back to the same card.
-                if (currentStreak < masteryGoal) {
-                    // Force it to stay on the current index so you can practice it again
-                    setCurrentIndex(currentIndex);
-                    return;
-                }
-
-                // 2. Otherwise, check if any OTHER cards in the batch are still unmastered
+                // 1. Check if ANY unmastered cards (including the current one if it still needs streaks) remain in the batch
                 const unmasteredInBatch = sessionBatch.filter(w => {
-                    if (w.id === currentCardObj.id) return false; // Current card is done
-                    return (wordStreaks[w.id] || 0) < masteryGoal;
+                    const streak = (wordStreaks[w.id] || 0);
+                    return streak < masteryGoal;
                 });
 
-                // 3. If no unmastered cards remain anywhere, complete the session!
+                // 2. If absolutely everything in the batch has reached the mastery goal, finish up!
                 if (unmasteredInBatch.length === 0) {
                     setSessionState('completed');
                     return;
                 }
 
-                // 4. Otherwise, find the next unmastered card index safely
+                // 3. Find the next unmastered card index safely, allowing loops back to the current card if it's still unmastered
                 let nextIdx = (currentIndex + 1) % sessionBatch.length;
                 let checkedCount = 0;
 
@@ -285,7 +277,7 @@
                     const candidate = sessionBatch[nextIdx];
                     const candidateStreak = (wordStreaks[candidate.id] || 0);
                     
-                    if (candidate.id !== currentCardObj.id && candidateStreak < masteryGoal) {
+                    if (candidateStreak < masteryGoal) {
                         break;
                     }
                     
@@ -299,7 +291,7 @@
                     setCurrentIndex(nextIdx);
                 }
             };
-
+            
             // Reset Word Streak in History Tab
             const resetWordStreak = (id) => {
                 setWordStreaks(prev => {
