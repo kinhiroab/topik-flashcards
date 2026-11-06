@@ -1585,33 +1585,29 @@
                 }
             };
 
-            function nextCard() {
-                // 1. Get all cards that are not yet mastered
-                const unmastered = cards.filter(w => !w.mastered);
-            
-                // If everything is mastered, handle completion
-                if (unmastered.length === 0) {
-                    showCompletionScreen();
+            const nextCard = () => {
+                // 1. Filter out cards in the current batch that have reached your mastery goal
+                const unmasteredBatch = sessionBatch.filter(w => (wordStreaks[w.id] || 0) < masteryGoal);
+
+                // 2. If everything in the batch is now mastered, check if we're completely done
+                if (unmasteredBatch.length === 0) {
+                    setSessionState('completed');
                     return;
                 }
-            
-                // 2. If there's only 1 unmastered card left, just use it
-                if (unmastered.length === 1) {
-                    currentCard = unmastered[0];
-                    displayCard(currentCard);
-                    return;
-                }
-            
-                // 3. Filter out the current card so we don't repeat the exact same card immediately
-                const otherUnmastered = unmastered.filter(w => w.id !== currentCard.id);
-            
-                // 4. Pick a completely random index from the remaining pool
-                const randomIndex = Math.floor(Math.random() * otherUnmastered.length);
-                currentCard = otherUnmastered[randomIndex];
-            
-                // 5. Render the card to the UI
-                displayCard(currentCard);
-            }
+
+                // 3. Filter out the current card so we don't repeat the exact same one immediately
+                const otherUnmastered = unmasteredBatch.filter(w => w.id !== currentCard.id);
+
+                // If there's only 1 card left total, loop back to it, otherwise pick randomly from the rest
+                const nextPool = otherUnmastered.length > 0 ? otherUnmastered : unmasteredBatch;
+                const randomIndex = Math.floor(Math.random() * nextPool.length);
+                
+                // Find where this randomly selected card lives in your sessionBatch array to update currentIndex
+                const nextTargetCard = nextPool[randomIndex];
+                const newIndex = sessionBatch.findIndex(w => w.id === nextTargetCard.id);
+
+                setCurrentIndex(newIndex);
+            };
 
             // Reset Word Streak in History Tab
             const resetWordStreak = (id) => {
